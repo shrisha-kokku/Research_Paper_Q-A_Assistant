@@ -6,7 +6,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.vectorstores import FAISS
-from langchain.document_loaders import PyPDFDirectoryLoader
+from langchain.document_loaders import PyPDFLoader
 
 import os
 import time
@@ -19,11 +19,16 @@ st.set_page_config(page_title="Smart RAG Assistant", page_icon="🤖", layout="w
 
 st.sidebar.header("⚙️ Settings")
 
-# Model parameters
+#Select specific PDF
+pdf_folder = "./research_papers"
+pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
+selected_pdf = st.sidebar.selectbox("📑 Select Research Paper", pdf_files)
+
+#Model parameters
 temperature = st.sidebar.slider("🌡️ Temperature", 0.0, 1.0, 0.3, step=0.1)
 max_tokens = st.sidebar.slider("🧩 Max Output Tokens", 256, 4096, 1024, step=128)
 
-# Model selection
+#Model selection
 model_choice = st.sidebar.selectbox("🧠 Choose LLM Model", ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"])
 
 #Initialize GROQ LLM
@@ -44,7 +49,10 @@ prompt = ChatPromptTemplate.from_template(
 def create_vector_embeddings():
     if "vectors" not in st.session_state:
         st.session_state.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v2")
-        st.session_state.loader = PyPDFDirectoryLoader("./research_papers")
+
+        # Load only the selected PDF
+        pdf_path = os.path.join(pdf_folder, selected_pdf)
+        st.session_state.loader = PyPDFLoader(pdf_path)
         st.session_state.docs = st.session_state.loader.load()
 
         if not st.session_state.docs:
@@ -56,13 +64,13 @@ def create_vector_embeddings():
         st.session_state.vectors = FAISS.from_documents(
             st.session_state.final_documents, embedding=st.session_state.embeddings
         )
-        st.success("✅ Vector Database created successfully!")
+        st.success(f"Vector Database created for **{selected_pdf}**✅")
 
 
 #Streamlit UI
 st.title("🤖 Research Paper Q-A Assistant")
 
-user_prompt = st.text_input("💬 Enter your question below:")
+user_prompt = st.text_input("💬 Enter your question below:", placeholder="Start typing...")
 
 if st.button("📄 Create Document Embeddings"):
     create_vector_embeddings()
@@ -87,3 +95,4 @@ if user_prompt:
             for i, doc in enumerate(response["context"]):
                 st.markdown(f"**Document {i+1}:**")
                 st.write(doc.page_content[:800] + "...")
+
