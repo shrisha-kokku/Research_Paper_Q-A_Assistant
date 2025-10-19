@@ -15,7 +15,7 @@ load_dotenv()
 
 groq_api_key = os.getenv("GROQ_API_KEY")
 
-st.set_page_config(page_title="Smart RAG Assistant", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Research Paper Q-A Assistant", page_icon="🤖", layout="wide")
 
 st.sidebar.header("⚙️ Settings")
 
