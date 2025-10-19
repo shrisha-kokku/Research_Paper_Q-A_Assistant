@@ -2,22 +2,23 @@ import streamlit as st
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.chains.qa import RetrievalQA
-from langchain.prompts import ChatPromptTemplate
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains import create_retrieval_chain
 from langchain_community.vectorstores import FAISS
 from langchain.document_loaders import PyPDFLoader
 
 import os
 import time
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
 st.set_page_config(page_title="Research Paper Q-A Assistant", page_icon="🤖", layout="wide")
 st.sidebar.header("⚙️ Settings")
 
-# Select PDF
+# Select specific PDF
 pdf_folder = "./research_papers"
 pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
 selected_pdf = st.sidebar.selectbox("📑 Select Research Paper", pdf_files)
@@ -32,7 +33,6 @@ model_choice = st.sidebar.selectbox("🧠 Choose LLM Model", ["llama-3.1-8b-inst
 # Initialize GROQ LLM
 llm = ChatGroq(model=model_choice, groq_api_key=groq_api_key, temperature=temperature, max_tokens=max_tokens)
 
-# Prompt template
 prompt = ChatPromptTemplate.from_template(
     """
     Answer the questions based **only** on the provided context.
@@ -49,6 +49,7 @@ def create_vector_embeddings():
     if "vectors" not in st.session_state:
         st.session_state.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v2")
 
+        # Load only the selected PDF
         pdf_path = os.path.join(pdf_folder, selected_pdf)
         st.session_state.loader = PyPDFLoader(pdf_path)
         st.session_state.docs = st.session_state.loader.load()
@@ -64,6 +65,7 @@ def create_vector_embeddings():
         )
         st.success(f"Vector Database created for **{selected_pdf}**✅")
 
+
 # Streamlit UI
 st.title("🤖 Research Paper Q-A Assistant")
 user_prompt = st.text_input("💬 Enter your question below:", placeholder="Start typing...")
@@ -75,26 +77,19 @@ if user_prompt:
     if "vectors" not in st.session_state:
         st.error("⚠️ Please create document embeddings first!")
     else:
+        document_chain = create_stuff_documents_chain(llm, prompt)
         retriever = st.session_state.vectors.as_retriever()
-
-        #Updated chain
-        retrieval_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            retriever=retriever,
-            chain_type="stuff",
-            chain_type_kwargs={"prompt": prompt}
-        )
+        retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         start = time.process_time()
-        response = retrieval_chain.run(user_prompt)
+        response = retrieval_chain.invoke({"input": user_prompt})
         elapsed = time.process_time() - start
 
         st.subheader("🧠 Answer:")
-        st.write(response)
+        st.write(response["answer"])
         st.caption(f"⏱️ Response Time: {elapsed:.2f} sec")
 
         with st.expander("📚 Retrieved Context Documents"):
-            docs = retriever.get_relevant_documents(user_prompt)
-            for i, doc in enumerate(docs):
+            for i, doc in enumerate(response["context"]):
                 st.markdown(f"**Document {i+1}:**")
                 st.write(doc.page_content[:800] + "...")
