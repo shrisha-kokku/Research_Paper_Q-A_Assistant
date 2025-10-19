@@ -3,6 +3,7 @@ langchain
 langchain-community
 langchain-groq
 langchain-huggingface
+langsmith
 python-dotenv
 faiss-cpu
 sentence-transformers
